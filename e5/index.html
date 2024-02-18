@@ -1,0 +1,683 @@
+<!-- Original script created by [name removed for anonymization] -->
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+<div id="experiment">
+  <p id="title"><strong>Are the objects the same?</strong></p>
+  <p id="browserCompat"><strong>Unfortunately, this study does not work in your current browser. Please use Chrome, Firefox, or Safari. Sorry!</strong></p>
+ 	<span id="instructions">
+    <p>In this experiment, you will perform a simple memory task.</p>
+  </span>
+  <span id="startInstructions">
+    <p>On each trial, you'll see 5 images of objects randomly placed in a grid. These images will flash very briefly, and your goal is to <strong>remember all the images</strong>.</p>
+    <p>After they appear briefly, the images will disappear. Then, another set of 5 images will appear.</p>
+    <p>Your task is to say whether these 5 images are the same as the initial 5 images, or if one of the images changed.</p>
+    <p>If all the objects are the <strong>same</strong>, click the <strong>"S"</strong> key on your keyboard; if one is <strong>different</strong>, click the <strong>"D"</strong> key on your keyboard.</p>
+    <p>Please make these judgments <strong>as fast as you can</strong>, while still making sure you get them right!</p>
+    <p>We realize this may be quite hard at times, but please do your best to remember the initial images and detect any changes.</p>
+    <br>
+    <br>
+    <a href='javascript:StartExperiment()' id='startExperiment'>Start experiment</a>
+  </span>
+
+  <div id="progressContainer">
+    <div class="progress" id="progressText">Study Progress</div>
+      <div class="progress" id="progressOutline">
+      <div class="progress" id="progressBar"></div>
+    </div>
+  </div>
+  <div id="trialInstructions">
+    <p style="text-align:center">Are the two sets of images the same? If so press "S", otherwise press "D".</p>
+  </div>
+  <br>
+  <br>
+
+  <div class="grid" id="searchGrid">
+    <div><img src="" id="img1"></div>
+    <div><img src="" id="img2"></div>
+    <div><img src="" id="img3"></div>
+    <div><img src="" id="img4"></div>
+    <div><img src="" id="img5"></div>
+    <div><img src="" id="img6"></div>
+    <div><img src="" id="img7"></div>
+    <div><img src="" id="img8"></div>
+    <div><img src="" id="img9"></div>
+  </div>
+
+
+</div>
+
+<div id="questionText">
+  <strong>Please answer the following questions.</strong>
+  <p style="text-align:center">Please describe the task you had to complete in this study</p>
+  <textarea id="taskGuess" rows=4 cols=40 placeholder="Enter your amswer here..."></textarea>
+	<input type="hidden" id="taskGuess" name="taskGuess">
+  <br>
+  <p style="text-align:center">If you had to guess, what do you think was the purpose of this study?</p>
+  <textarea id="purposeGuess" rows=4 cols=40 placeholder="Enter your answer here..."></textarea>
+	<input type="hidden" id="purposeGuess" name="purposeGuess">
+  <br>
+  <p style="text-align:center">What is 1 + 1?</p>
+  <textarea id="sumCheck" rows=1 cols=20 placeholder="Enter your answer here..."></textarea>
+  <br>
+  <br>
+  <a href='javascript:doneExperiment()' id='doneExperiment' class='button'>Next</a>
+</div>
+
+<div id="doneText">
+	<strong>This is the last page of the study. Do not close your browser! You will be able to submit your results and be redirected to Prolific at the end of this page.</strong>
+  <br>
+  <p>You can also feel free to leave any comments below about how the experiment went, but that's up to you. Did everything seem to work OK?</p>
+	<textarea id="commentBox" rows=4 cols=40 placeholder="Enter your comments here..."></textarea>
+	<input type="hidden" id="comments" name="comments">
+  <br>
+  <br>
+  <br>
+  <a href='javascript:submitData("./data")' id='submitDataButton' class='button'>Submit results</a>
+  <br>
+  <span id="redirectToProlific">
+    <p>Your browser should automatically redirect you to Prolific's webpage where you will be given a completion code.</p>
+    <p>Redirecting in <span id = countDown><b></b></span> seconds.</p>
+    <p>If you're not automatically redirected in a few seconds, please copy and paste this address on your web browser:
+    <b><span id = urlProlific></span></b></p>
+  </span>
+</div>
+
+<script>
+$(document).ready(introRoutines);
+
+// hide all things aside from instructions
+$('#trialInstructions').hide();
+$('#redirectToProlific').hide();
+$("#searchGrid").hide();
+
+var requestAnimationFrame = window.requestAnimationFrame ||
+                            window.mozRequestAnimationFrame ||
+                            window.webkitRequestAnimationFrame ||
+                            window.msRequestAnimationFrame;
+
+// experiment params
+var experimentName = 'e5';
+var experimentVersion = 'visual_working_memory';
+
+// timing params
+var itiTime = 1000; // 1000 ms between trials
+var stimTime = 500; // 500 ms presentation
+var isiTime = 900; // 900 ms isi
+
+// object for preloading images
+var allImages = {};
+
+// various global vars
+var currentTrialNum;
+var trial;
+var subjectID, studyID, sessionID;
+var responses = {};
+var startHITTime;
+var startExperimentTime;
+var t0_respond;
+var answeredSum = false;
+var answeredTask = false;
+var answeredPurpose = false;
+
+// define nTrials
+var nTrials = 200;
+var trial_types = ['same_mech', 'same_visual', 'different_mech', 'different_visual'];
+var trial_types = Array(50).fill(trial_types).flat();
+trial_types = shuffle(trial_types);
+
+// define images
+var mechanistic_objects = ['phone', 'rocket', 'fish', 'tooth', 'monitor',
+                           'headphones', 'hand', 'tractor', 'dog', 'lamp'];
+var visual_objects = ['tree', 'comb', 'backpack', 'shoe', 'grapes',
+                      'bananas', 'curtains', 'hose', 'pineapple', 'toothbrush'];
+
+// get browser params, tell user browser is not compatible if needed
+var browserInfo = getBrowser();
+if (browserInfo['name'] == "msie" || browserInfo['name'] == "Opera") {
+  $('#browserCompat').show();
+} else {
+  $('#browserCompat').hide();
+}
+
+// redirect params
+var urlProlific = "https://app.prolific.co/submissions/complete?cc=5B0244C9";
+var finalCountDownClock = 5;
+
+// when the document has loaded
+function introRoutines() {
+  [subjectID, studyID, sessionID] = getProlificInfo();
+
+  currentTrialNum = -1;
+
+  // gen trials
+  trials = generateTrials();
+  responses['trialData'] = [];
+
+  startHITTime = currentTime();
+
+  preloadFiller();
+  preload();
+}
+
+function getProlificInfo() {
+  let urlParams = new URLSearchParams(window.location.search);
+  prolificPID = urlParams.get("PROLIFIC_PID");
+  studyID = urlParams.get("STUDY_ID");
+  sessionID = urlParams.get("SESSION_ID");
+  return [prolificPID, studyID, sessionID]
+}
+
+
+function generateTrials() {
+  trials = [];
+
+  for (i = 0; i < nTrials; i++) {
+    var trial = {};
+    shuffle(mechanistic_objects);
+    shuffle(visual_objects);
+
+    trial.type = trial_types[i]
+    if (trial.type.includes("mech")) {
+      trial.initialImages = mechanistic_objects.slice(0, 5);
+      if (trial.type.includes("different")) {
+        trial.substitute_index = getRandomInt(0, 5);
+        trial.substitute_object = mechanistic_objects[6];
+        trial.finalImages = [...trial.initialImages];
+        trial.finalImages[trial.substitute_index] = trial.substitute_object;
+      }
+    } else if (trial.type.includes("visual")) {
+      trial.initialImages = visual_objects.slice(0, 5);
+      if (trial.type.includes("different")) {
+        trial.substitute_index = getRandomInt(0, 5);
+        trial.substitute_object = visual_objects[6];
+        trial.finalImages = [...trial.initialImages];
+        trial.finalImages[trial.substitute_index] = trial.substitute_object;
+      }
+    }
+
+    if (trial.type.includes("same")) {
+      trial.finalImages = trial.initialImages;
+      trial.substitute_index = 0;
+      trial.substitute_object = "na";
+    }
+
+    trial.locations = shuffle(Array.from({length: 9}, (_, i) => i + 1));
+
+    trials.push(trial);
+  }
+  return trials;
+
+}
+
+function StartExperiment() {
+  $('#startExperiment').hide();
+  $('#instructions').hide();
+  $('#startInstructions').hide();
+  startedExperiment = true;
+  startExperimentTime = new Date();
+  $('#progressContainer').show();
+  $('.progress').show();
+  setTimeout(loadTrial, itiTime);
+
+}
+
+function loadTrial() {
+  currentTrialNum++;
+  if (currentTrialNum < nTrials) {
+    trial = trials[currentTrialNum];
+    trial['trialID'] = currentTrialNum;
+    prepStim();
+  } else {
+    showQuestion();
+  }
+
+}
+
+function prepStim() {
+
+  for (i = 0; i < 5; i++) {
+    $("#img" + trial.locations[i]).attr("src", allImages[trial.initialImages[i]]);
+  }
+
+  for (i = 5; i < trial.locations.length; i++) {
+    $("#img" + trial.locations[i]).attr("src", allImages['filler']);
+  }
+
+  setTimeout(showStim, itiTime / 2);
+}
+
+function showStim() {
+  $('#progressBar').css('width',((currentTrialNum/nTrials)*100) + 'px');
+  $("#searchGrid").show();
+  $('#trialInstructions').show();
+
+  setTimeout(isi, stimTime);
+
+}
+
+function isi() {
+  $("#searchGrid").hide();
+
+  if (trial.type.includes("different")){
+    $("#img" + trial.locations[trial.substitute_index]).attr("src", allImages[trial.substitute_object]);
+  }
+
+  setTimeout(acceptResponse, isiTime);
+}
+
+function acceptResponse() {
+  $("#searchGrid").show();
+
+  t0_respond = currentTime();
+
+  fired = false;
+  document.onkeydown = function(e) {
+      if (!fired) {
+           if (e.keyCode == 83) {
+              fired = true;
+              trial['response'] = 'same';
+              respond()
+          } else if (e.keyCode == 68) {
+              fired = true;
+              trial['response'] = 'different';
+              respond()
+          }
+      }
+    };
+}
+
+function respond() {
+  var rt = currentTime() - t0_respond;
+
+  trial['rt'] = Math.round(rt * 10) / 10;
+  trial['subjectID'] = subjectID;
+  responses['trialData'].push(trial);
+
+  $("#searchGrid").hide();
+
+  setTimeout(loadTrial, itiTime / 2);
+
+}
+
+function showQuestion() {
+  $('#experiment').hide();
+  $('#doneExperiment').hide();
+  $('#questionText').show();
+
+  document.getElementById('sumCheck').addEventListener('input', function() {
+    var text = this.value;
+
+    if (text == 2) {
+        answeredSum = true;
+    }
+
+    if(answeredSum == true && answeredTask == true && answeredPurpose == true) {
+      $('#doneExperiment').show();
+    }
+  });
+
+  document.getElementById('purposeGuess').addEventListener('input', function() {
+    var text = this.value;
+
+    if (text.length >= 1) {
+      answeredPurpose = true;
+    }
+    if(answeredSum == true && answeredTask == true && answeredPurpose == true) {
+      $('#doneExperiment').show();
+    }
+  });
+
+  document.getElementById('taskGuess').addEventListener('input', function() {
+    var text = this.value;
+
+    if (text.length >= 1) {
+      answeredTask = true;
+    }
+    if(answeredSum == true && answeredTask == true && answeredPurpose == true) {
+      $('#doneExperiment').show();
+    }
+  });
+
+}
+
+function doneExperiment() {
+  $('#questionText').hide();
+	$('#doneText').show();
+  $('#submitButton').show();
+	$("#submitButton").css('visibility','visible');
+  $('.progress').hide();
+	$('#commentBox').show();
+
+  assignExperimentInfo();
+
+}
+
+function assignExperimentInfo() {
+  responses['experimentName'] = experimentName;
+  responses['experimentVersion'] = experimentVersion;
+  responses['experimentTime'] = Math.round((currentTime() - startHITTime) * 10) / 10;
+
+  responses['studyID'] = studyID;
+  responses['sessionID'] = sessionID;
+
+  responses['browserName'] = browserInfo['name'];
+  responses['browserVersion'] = browserInfo['version'];
+  responses['displayWindowHeight'] = $(window).height();
+  responses['displayWindowWidth'] = $(window).width();
+  responses['displayScreenHeight'] = screen.height;
+  responses['displayScreenWidth'] = screen.width;
+
+}
+
+function submitData(outDir) {
+  responses['purposeGuess'] = document.getElementById('purposeGuess').value;
+  responses['taskGuess'] = document.getElementById('taskGuess').value;
+  responses['commentText'] = document.getElementById('commentBox').value;
+  responses['totalTime'] = Math.round((currentTime() - startHITTime) * 10) / 10;
+  // get data string from response array
+  var dataString = JSON.stringify(responses);
+
+  // post response to server
+
+  $.post("./logTrial.py", {
+    subjectID: subjectID,
+    dataString: dataString,
+    outDir: outDir
+  });
+
+  $('#redirectToProlific').show();
+  $('#urlProlific').text(urlProlific);
+  $('#countDown').text((finalCountDownClock).toString());
+  redirectTimer = setInterval(countDown, 1000);
+}
+
+function currentTime() {
+  return performance.now();
+
+}
+
+function getBrowser() {
+  var ua=navigator.userAgent,tem,M=ua.match(/(opera|chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i) || [];
+  if(/trident/i.test(M[1])) {
+    tem=/\brv[ :]+(\d+)/g.exec(ua) || [];
+    return {name:'IE',version:(tem[1]||'')};
+    }
+  if(M[1]==='Chrome') {
+    tem=ua.match(/\bOPR|Edge\/(\d+)/)
+    if(tem!=null) {
+      return {name:'Opera', version:tem[1]};
+      }
+    }
+  M=M[2]? [M[1], M[2]]: [navigator.appName, navigator.appVersion, '-?'];
+  if((tem=ua.match(/version\/(\d+)/i))!=null) {
+    M.splice(1,1,tem[1]);
+  }
+  return {
+    name: M[0],
+    version: M[1]
+  };
+
+}
+
+// randomly shuffle elements of array
+function shuffle(array) {
+  return array.sort(() => Math.random() - 0.5);
+
+}
+
+function countDown () {
+  finalCountDownClock--;
+  if (finalCountDownClock == 0) {
+    clearInterval(redirectTimer);
+    window.location = urlProlific;
+  } else {
+    $('#countDown').text((finalCountDownClock).toString());
+  }
+}
+
+// get random integer
+function getRandomInt(min, max) {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+//preloading
+function preload() {
+  for (i = 0; i < mechanistic_objects.length; i++) {
+    currImageName = mechanistic_objects[i];
+    var currImage = new Image();
+    currImage.src = 'stimuli/' + currImageName + '.png';
+    allImages[currImageName] = currImage.src;
+    currImage.onload = function() {
+    };
+
+    currImageName = visual_objects[i];
+    var currImage = new Image();
+    currImage.src = 'stimuli/' + currImageName + '.png';
+    allImages[currImageName] = currImage.src;
+    currImage.onload = function() {
+    };
+  }
+}
+
+// preload filler, which needs to be done only once
+function preloadFiller() {
+  var currImage = new Image();
+  currImage.src = 'stimuli/filler.png'
+  allImages['filler'] = currImage.src;
+}
+
+// sampling
+Array.prototype.sample = function(){
+  return this[Math.floor(Math.random()*this.length)];
+}
+
+</script>
+
+<style>
+body {
+  font-family: Helvetica,Arial;
+  font-size: 14pt;
+  height: 100%;
+  margin: 10 auto;
+}
+
+#instructions,#startInstructions {
+	display:block;
+	max-width: 80%;
+	margin: 0 auto;
+	margin-top: 0px;
+  text-align: left;
+}
+
+#trialInstructions {
+	display:block;
+	max-width: 80%;
+	margin: 0 auto;
+	margin-top: 0px;
+  text-align: left;
+  margin-bottom: -1.2em;
+}
+
+#title, #browserCompat {
+  font-size: 18pt;
+  text-align: center;
+  margin: 0 auto;
+}
+canvas {
+  border: 1px solid black;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+input {
+  position: relative;
+  text-align: center;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+#startExperiment, #runTest, #playButton, #purposeButton, #submitDataButton, #doneExperiment, #consentButton {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto;
+	color: black;
+	font-size:14pt;
+	border: 3px outset gray;
+	background-color: #4CAF50;
+	padding: 0px;
+	text-decoration: none;
+	font-weight: bold;
+  position: relative;
+  width: 150px;
+	margin-top:0px;
+	margin-bottom:0px;
+  border-radius: 8px;
+  transition-duration: 0.4s;
+}
+
+#startExperiment:hover, #runTest:hover, #revealImage:hover, #purposeButton:hover, #submitDataButton:hover, #doneExperiment:hover, #consentButton:hover {
+  background-color: #4CAF50; /* Green */
+  color: white;
+}
+
+#startExperiment:active, #runTest:active, #revealImage:active, #purposeButton:active, #submitDataButton:active, #doneExperiment:active, #consentButton:active {
+	background: gray;
+}
+
+.progress {
+  text-align: center;
+  display: none;
+  height: 15px;
+}
+
+#progressContainer {
+  text-align: center;
+  display: none;
+}
+
+#progressText {
+  font-size: 14pt;
+  color: black;
+  font-weight: bold;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+#progressOutline {
+  display: inline-block;
+  background: white;
+  border: 3px solid black;
+  width: 100px;
+  margin: 5 auto;
+  margin-bottom: 10px;
+  border-radius: 5px;
+}
+
+#progressBar {
+  background: #4CAF50;
+  width: 0px;
+  margin-bottom: 10px;
+}
+
+.container {
+  margin: auto;
+}
+
+#container_video {
+  position: absolute;
+  left: 50%;
+  top: 150px;
+  transform: translate(-50%, 150px);
+  margin: auto;
+  color: black;
+  background-color: black;
+  text-align: center;
+}
+
+#container1 {
+  position: absolute;
+  left: 20%;
+  top: 150px;
+  transform: translate(-20%, 150px);
+  margin: auto;
+  color: black;
+  text-align: center;
+}
+
+#container2 {
+  position: absolute;
+  left: 80%;
+  top: 150px;
+  transform: translate(-80%, 150px);
+  margin: auto;
+  color: black;
+  text-align: center;
+}
+
+#doneText, #questionText, #getDemos {
+	display:none;
+	max-width: 500px;
+	text-align:center;
+	margin: 10 auto;
+	padding-bottom:10px;
+	font-size:14pt
+}
+
+#doneText p, #questiontext p, #getDemos p {
+	font-size:12pt
+}
+
+.doneTextStyle, .questionTextStyle, .getDeosStyle {
+  display: none;
+}
+
+#commentBox {
+	display:none;
+}
+
+#submitButton {
+	display:block;
+  width: 100%;
+  margin-top: 500px;
+  margin-bottom: 50px;
+}
+
+.center {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  width: 50%;
+}
+
+img {
+    max-width: 500px;
+    height: auto;
+}
+
+.grid {
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  grid-gap: 1rem;
+  height: 25%;
+  width: 25%;
+  margin: 0 auto;
+  position:absolute;
+  left: 50%;
+  top: 85px;
+  transform: translate(-50%, 85px);
+  justify-content: center;
+
+}
+
+.grid > div::before,
+.grid > div > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+</style>
